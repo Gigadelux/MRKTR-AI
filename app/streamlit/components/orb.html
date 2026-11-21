@@ -1,0 +1,204 @@
+<!doctype html>
+<!--
+  Animated 3D orb. Self-contained: one file plus three.min.js (three.js r149, MIT, see three.LICENSE.txt).
+  Open it directly in a browser to preview, or render it with orb.py (which inlines three.js).
+  A sphere of dotted contour lines whose flow is warped by noise, a Fresnel rim glow,
+  a few drifting particles and light mouse parallax. No post-processing.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #orb { position: fixed; inset: 0; }
+  #orb canvas { display: block; width: 100%; height: 100%; }
+  #fallback { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; }
+  #fallback div { width: 52vmin; height: 52vmin; border-radius: 50%;
+    background: radial-gradient(circle at 60% 35%, rgba(150,200,255,.25), rgba(60,40,140,.25) 55%, #000 72%);
+    box-shadow: 0 0 60px 8px rgba(130,170,255,.35); }
+</style>
+</head>
+<body>
+<div id="orb"></div>
+<div id="fallback"><div></div></div>
+<script src="three.min.js"></script>
+<script>
+(function () {
+  const host = document.getElementById("orb");
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  } catch (e) {
+    document.getElementById("fallback").style.display = "flex";
+    return;
+  }
+  renderer.setClearColor(0x000000, 1);
+  host.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 50);
+  camera.position.z = 3.7;
+  const orb = new THREE.Group();
+  scene.add(orb);
+
+  // 3D simplex noise (Ashima Arts / Stefan Gustavson, MIT)
+  const NOISE = `
+    vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+    vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}
+    float snoise(vec3 v){
+      const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);
+      vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);
+      vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g; vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);
+      vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+      i=mod289(i);
+      vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));
+      float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;
+      vec4 j=p-49.0*floor(p*ns.z*ns.z); vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);
+      vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);
+      vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);
+      vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));
+      vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+      vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+      vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+      p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+      vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
+      return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
+    }`;
+
+  // --- dotted contour lines on a sphere ------------------------------------------------------
+  const LINES = 72, PER_LINE = 560;
+  const pts = new Float32Array(LINES * PER_LINE * 3);
+  let k = 0;
+  const tilt = new THREE.Euler(0.6, 0.0, 0.35);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < LINES; i++) {
+    const y = -0.985 + (1.97 * i) / (LINES - 1);
+    const r = Math.sqrt(1 - y * y);
+    for (let j = 0; j < PER_LINE; j++) {
+      const a = (j / PER_LINE) * Math.PI * 2;
+      v.set(Math.cos(a) * r, y, Math.sin(a) * r).applyEuler(tilt);
+      pts[k++] = v.x; pts[k++] = v.y; pts[k++] = v.z;
+    }
+  }
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute("position", new THREE.BufferAttribute(pts, 3));
+  const lineMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uSize: { value: 4 } },
+    vertexShader: `
+      uniform float uTime; uniform float uSize;
+      varying float vRim; varying float vBand;
+      ${NOISE}
+      void main() {
+        vec3 p = position;
+        float t = uTime * 0.07;
+        vec3 flow = vec3(snoise(p * 0.8 + vec3(t, 0.0, 0.0)),
+                         snoise(p * 0.8 + vec3(0.0, t, 5.2)),
+                         snoise(p * 0.8 + vec3(3.1, 0.0, t)));
+        vec3 q = normalize(p + 0.34 * flow);                 // lines bend into smooth flowing bands
+        float ripple = snoise(q * 1.8 + t * 1.5);
+        q *= 1.0 + 0.018 * ripple;
+        vec4 mv = modelViewMatrix * vec4(q, 1.0);
+        vec3 n = normalize(normalMatrix * normalize(q));
+        vRim = 1.0 - abs(dot(n, normalize(-mv.xyz)));
+        vBand = 0.5 + 0.5 * ripple;
+        gl_PointSize = uSize * (0.85 + 0.9 * vRim) * (3.6 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying float vRim; varying float vBand;
+      void main() {
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.12, d);
+        vec3 inner = vec3(0.42, 0.46, 1.0);
+        vec3 outer = vec3(0.72, 0.96, 1.0);
+        vec3 col = mix(inner, outer, pow(vRim, 1.4));
+        float alpha = a * (0.30 + 0.55 * pow(vRim, 3.0)) * (0.7 + 0.3 * vBand);
+        gl_FragColor = vec4(col * alpha * 1.25, alpha);
+      }`
+  });
+  orb.add(new THREE.Points(lineGeo, lineMat));
+
+  // --- Fresnel rim glow ------------------------------------------------------------------------
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(1.03, 64, 64),
+    new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `
+        varying vec3 vN; varying vec3 vV;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        varying vec3 vN; varying vec3 vV;
+        void main() {
+          float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 4.0);
+          float hot = smoothstep(0.55, 1.0, dot(normalize(vN), normalize(vec3(0.75, 0.55, 0.35))));
+          vec3 col = mix(vec3(0.45, 0.4, 1.0), vec3(0.75, 0.97, 1.0), f);
+          gl_FragColor = vec4(col * (f * 0.5 + hot * f * 1.1), 1.0);
+        }`
+    })
+  );
+  orb.add(glow);
+
+  // --- particles: dust around the orb and sparkles inside --------------------------------------
+  function cloud(count, rMin, rMax, size, opacity) {
+    const a = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const r = rMin + Math.random() * (rMax - rMin);
+      const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+      a[i * 3] = r * Math.sin(ph) * Math.cos(th); a[i * 3 + 1] = r * Math.cos(ph); a[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(a, 3));
+    return new THREE.Points(g, new THREE.PointsMaterial({
+      size, color: 0xbfe6ff, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true
+    }));
+  }
+  const dust = cloud(260, 1.12, 1.9, 0.014, 0.55);
+  const sparks = cloud(140, 0.05, 0.9, 0.011, 0.75);
+  orb.add(dust, sparks);
+
+  // --- sizing, pointer, loop -------------------------------------------------------------------
+  const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let w = 0, h = 0, tx = 0, ty = 0, running = true;
+  function resize() {
+    w = host.clientWidth || 600; h = host.clientHeight || 400;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    renderer.setPixelRatio(dpr); renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.position.z = 3.7 * Math.max(1, 1.15 / camera.aspect);   // keep the orb inside narrow frames
+    camera.updateProjectionMatrix();
+    lineMat.uniforms.uSize.value = dpr * Math.min(h, w) / 480 * 3.4;
+  }
+  new ResizeObserver(resize).observe(host); resize();
+  window.addEventListener("pointermove", (e) => {
+    tx = (e.clientX / w - 0.5) * 0.5; ty = (e.clientY / h - 0.5) * 0.35;
+  });
+  document.addEventListener("visibilitychange", () => { running = !document.hidden; if (running) tick(); });
+
+  const clock = new THREE.Clock();
+  let t = 0;
+  function frame(dt) {
+    t += dt;
+    lineMat.uniforms.uTime.value = t;
+    orb.rotation.y += dt * 0.07;
+    orb.rotation.x += (ty - orb.rotation.x) * 0.04;
+    orb.position.x += (tx * 0.4 - orb.position.x) * 0.04;
+    dust.rotation.y -= dt * 0.02; sparks.rotation.y += dt * 0.03;
+    renderer.render(scene, camera);
+  }
+  function tick() {
+    if (!running) return;
+    frame(Math.min(clock.getDelta(), 0.05));
+    if (!reduced) requestAnimationFrame(tick);
+  }
+  if (reduced) { t = 12; frame(0); } else { tick(); }
+})();
+</script>
+</body>
+</html>
