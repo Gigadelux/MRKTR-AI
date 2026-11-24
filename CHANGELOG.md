@@ -1,6 +1,6 @@
 # Changelog
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-24_
 
 All notable changes to this project are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
@@ -10,6 +10,7 @@ Add one line per meaningful change under `[Unreleased]`. Security-relevant chang
 ## [Unreleased]
 
 ### Added
+- 2026-11-24: `messages.metadata` (jsonb) for Gmail threading fields, voice details and measured usage; the models, mock data and tests follow.
 - 2026-11-21: `crm.company_description` (what the lead's company does) in `SCHEMA.sql`, the models, the mock data and the Leads page.
 - 2026-11-20: `requirements.txt` (runtime dependencies, exported from `uv.lock`) for pip users.
 - 2026-11-20: `SCHEMA.sql` and `SCHEMA.md`: Supabase schema (funnel tables, `email_drafts`, Braintrust-shaped `eval_*` tables), RLS on every table.
@@ -26,8 +27,10 @@ Add one line per meaningful change under `[Unreleased]`. Security-relevant chang
 - 2026-11-20: CLAUDE.md now cites `app/tests/`, `SCHEMA.*` and `assets/`.
 
 ### Fixed
+- 2026-11-24: the unique index on messages is now `(user_id, channel, channel_message_id)`; Telegram message ids repeat across chats, so the old `(channel, channel_message_id)` index would have rejected valid messages.
 - 2026-11-21: dashboard sidebar could not be reopened after collapsing (the CSS hid the toolbar that holds the expand button); it is kept visible now.
 - 2026-11-21: replaced deprecated `use_container_width` with `width="stretch"` and `st.components.v1.html` with `st.iframe`.
 
 ### Security
+- 2026-11-24: a Telegram id can be linked to only one user (unique index on `users.channel_ids->>'telegram'`).
 - 2026-11-20: dashboard and API bind to `127.0.0.1` only; RLS enabled on all tables with no policies.

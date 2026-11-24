@@ -1,6 +1,6 @@
 # Security Policy
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-24_
 
 ## Supported versions
 
@@ -31,6 +31,7 @@ Record changes to allowlists, guards, masking, auth and data retention here, new
 
 | Date | Change | Area |
 |---|---|---|
+| 2026-11-24 | A Telegram id can be linked to only one user (unique index), so two leads cannot share one account | Allowlist integrity |
 | 2026-11-20 | Database schema with row-level security on every table and no policies (service role only); `masked_messages` unreachable by other roles | Data access |
 | 2026-11-20 | Dashboard and API bound to `127.0.0.1` | Network exposure |
 | 2026-11-20 | Collected public knowledge-base content lives only in `gitignore/` | Data retention |

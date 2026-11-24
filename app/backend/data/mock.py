@@ -148,11 +148,12 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
         source: str,
         when: datetime,
         audio: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> t.Message:
         m = t.Message(
             id=_id(rng), user_id=user.user_id, channel=channel, direction=direction, text=text,
             transcript_source=source, audio_ref=audio, created_at=when,
-            channel_message_id=f"mock-{len(messages) + 1}",
+            channel_message_id=f"mock-{len(messages) + 1}", metadata=metadata or {},
         )  # fmt: skip
         messages.append(m)
         return m
@@ -167,7 +168,10 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
         )  # fmt: skip
         users.append(user)
         message(user, "email", "out", f"Hi {first}, a short note about voice for your team. [MOCK email]",
-                "agent_text", sent_at)  # fmt: skip
+                "agent_text", sent_at,
+                metadata={"gmail_thread_id": f"mock-thread-{i:03d}",
+                          "rfc822_message_id": f"<mock-{i:03d}@example.com>",
+                          "subject": "A short note about voice [MOCK]"})  # fmt: skip
         event(user, "email_sent", sent_at)
         status = "contacted"
 
@@ -198,7 +202,8 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
                         ))  # fmt: skip
                     else:
                         message(user, "telegram", "in", line, "stt" if voice else "user_text", when,
-                                "mock://voice/in.ogg" if voice else None)  # fmt: skip
+                                "mock://voice/in.ogg" if voice else None,
+                                {"usage": {"stt_seconds": round(len(line) / 15, 1)}} if voice else None)  # fmt: skip
                     when += timedelta(seconds=rng.randint(5, 40))
                     reply = rng.choice(AGENT_LINES)
                     if user.pref_mode != "text_only" and rng.random() < 0.4:
@@ -210,6 +215,7 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
                             "tts_script",
                             when,
                             "mock://voice/out.ogg",
+                            {"usage": {"tts_characters": len(reply)}},
                         )
                         calls.append(t.ToolCall(id=_id(rng), user_id=user.user_id, tool="send_voice_note",
                                                 args={"text": reply}, result={"sent": True}, created_at=when))  # fmt: skip
@@ -259,7 +265,12 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
     for k, (label, incoming, draft) in enumerate(replies):
         user = users[k]
         when = ANCHOR + timedelta(days=2, hours=k)
-        m = message(user, "email", "in", incoming, "user_text", when)
+        m = message(
+            user, "email", "in", incoming, "user_text", when,
+            metadata={"gmail_thread_id": f"mock-thread-{k:03d}",
+                      "rfc822_message_id": f"<mock-reply-{k:03d}@example.com>",
+                      "subject": "Re: A short note about voice [MOCK]"},
+        )  # fmt: skip
         status = [
             "pending",
             "approved",

@@ -41,3 +41,18 @@ def test_crm_has_company_description_for_new_and_existing_databases():
         "alter table crm add column if not exists company_description" in SQL
     )  # databases made earlier
     assert "comment on column crm.company_description" in SQL
+
+
+def test_messages_have_metadata_for_new_and_existing_databases():
+    block = SQL[SQL.index("create table if not exists messages ") :].split(");", 1)[0]
+    assert "metadata" in block  # fresh installs
+    assert "alter table messages add column if not exists metadata" in SQL  # earlier databases
+    assert "comment on column messages.metadata" in SQL
+
+
+def test_message_and_telegram_ids_are_unique_per_user_not_per_channel():
+    assert "messages_channel_msg_uq" not in SQL.replace(
+        "drop index if exists messages_channel_msg_uq", ""
+    )
+    assert "on messages (user_id, channel, channel_message_id)" in SQL
+    assert "users_telegram_id_uq" in SQL and "channel_ids ->> 'telegram'" in SQL

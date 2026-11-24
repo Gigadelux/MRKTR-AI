@@ -92,3 +92,11 @@ def test_qualified_leads_have_a_company_description():
     )
     calls = [c for c in tables["tool_calls"] if c.tool == "update_crm"]
     assert calls and all(c.args["company_description"] for c in calls)
+
+
+def test_message_metadata_holds_threading_and_usage_when_present():
+    messages = mock.build()["messages"]
+    emails = [m for m in messages if m.channel == "email"]
+    assert emails and all(m.metadata["gmail_thread_id"].startswith("mock-") for m in emails)
+    tts = [m for m in messages if m.transcript_source == "tts_script"]
+    assert tts and all(m.metadata["usage"]["tts_characters"] == len(m.text) for m in tts)

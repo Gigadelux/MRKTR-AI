@@ -50,6 +50,7 @@ class Message(BaseModel):
     text: str | None = None
     audio_ref: str | None = None
     transcript_source: TranscriptSource
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
 

@@ -1,6 +1,6 @@
 # CLAUDE.md — mrktr AI
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-24_
 
 ## What this project is
 **mrktr AI** is a general, modular go-to-market (GTM) agent. Given a company profile and its documents, it runs a measured outreach funnel:
@@ -119,7 +119,8 @@ All external services sit behind an interface in `app/backend/services/`, chosen
 users(user_id, channel_ids, email, start_token, pref_mode, consent_at, company)
 crm(user_id, company_name, company_description, role, industry, size, use_case, budget, timeline, status)
 messages(id, user_id, channel, channel_message_id, direction, text, audio_ref,
-         transcript_source [user_text|stt|agent_text|tts_script], created_at)
+         transcript_source [user_text|stt|agent_text|tts_script],
+         metadata jsonb, created_at)   # metadata: Gmail thread/headers, voice duration, measured usage
 masked_messages(id, message_id, original_text, masked_text,
                 detector, score, reason, created_at)          # RLS: owner only
 tool_calls(id, user_id, tool, args, result, refused_reason, created_at)

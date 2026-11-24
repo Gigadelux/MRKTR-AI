@@ -1,6 +1,6 @@
 # Database schema
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-24_
 
 The database is Supabase (Postgres + pgvector). [`SCHEMA.sql`](SCHEMA.sql) creates everything and is safe to run more than once.
 
@@ -39,9 +39,9 @@ erDiagram
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `users` | One row per person in the funnel | `start_token` is unique; `consent_at` null means the bot must not reply; `pref_mode` is `audio_transcript`, `audio_only` or `text_only` |
+| `users` | One row per person in the funnel | `start_token` is unique; a Telegram id can be linked to only one user; `consent_at` null means the bot must not reply; `pref_mode` is `audio_transcript`, `audio_only` or `text_only` |
 | `crm` | Qualification fields written by `update_crm` | One row per user; `company_description` is a short description of what the lead's company does; `status` is `new`, `contacted`, `engaged`, `qualified`, `booked`, `not_now` or `unsubscribed` |
-| `messages` | Every message in both directions | `transcript_source` is `user_text`, `stt`, `agent_text` or `tts_script`; unique per `(channel, channel_message_id)` |
+| `messages` | Every message in both directions | `transcript_source` is `user_text`, `stt`, `agent_text` or `tts_script`; `metadata` (jsonb) holds Gmail `gmail_thread_id`, `rfc822_message_id` and `subject`, voice `duration_s` and `mime_type`, and measured usage (`llm_input_tokens`, `llm_output_tokens`, `tts_characters`, `stt_seconds`); unique per `(user_id, channel, channel_message_id)` because Telegram message ids are unique only inside one chat |
 | `masked_messages` | Originals of sentences removed before the LLM saw them | Service role only |
 | `tool_calls` | Every tool call, refusals included | `refused_reason` is set when code refused the call |
 | `events` | Funnel milestones (`email_sent`, `token_redeemed`, `mode_chosen`, `qualified`, `booked`, ...) | The source for growth metrics |

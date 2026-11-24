@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 
+import braintrust
 import uvicorn
 
 from app.backend.app import create_app
@@ -53,6 +54,8 @@ def stop(proc: subprocess.Popen) -> None:
 
 
 def main() -> int:
+    braintrust.init_logger(project="My Project")
+    braintrust.auto_instrument()  # traces supported LLM clients created from here on
     settings = get_settings()
     setup_logging(settings)
     try:

@@ -26,6 +26,8 @@ create table if not exists users (
 );
 comment on table users is 'People in the outreach funnel. Deleting a row deletes everything linked to it.';
 comment on column users.channel_ids is 'External ids per channel, e.g. {"telegram": 123456789}.';
+create unique index if not exists users_telegram_id_uq
+    on users ((channel_ids ->> 'telegram')) where channel_ids ->> 'telegram' is not null;
 comment on column users.start_token is 'Token in the Telegram deep link; redeeming it links the email to the Telegram user.';
 comment on column users.pref_mode is 'Hard limit on what the agent may send. text_only means voice notes are refused.';
 comment on column users.consent_at is 'When the user gave consent. Null means the bot must not reply.';
@@ -68,14 +70,20 @@ create table if not exists messages (
     audio_ref           text,                           -- Telegram file_id or a path under gitignore/temp/
     transcript_source   text not null
                         check (transcript_source in ('user_text', 'stt', 'agent_text', 'tts_script')),
+    metadata            jsonb not null default '{}'::jsonb,
     created_at          timestamptz not null default now()
 );
-create unique index if not exists messages_channel_msg_uq
-    on messages (channel, channel_message_id) where channel_message_id is not null;
+-- databases created before this column existed
+alter table messages add column if not exists metadata jsonb not null default '{}'::jsonb;
+-- Telegram message ids are unique only inside one chat, so uniqueness is per user, not per channel.
+drop index if exists messages_channel_msg_uq;
+create unique index if not exists messages_user_channel_msg_uq
+    on messages (user_id, channel, channel_message_id) where channel_message_id is not null;
 create index if not exists messages_user_created_idx on messages (user_id, created_at);
 comment on table messages is 'Every incoming and outgoing message. Audio always has a transcript in text.';
 comment on column messages.direction is 'in = from the user, out = from the agent.';
 comment on column messages.audio_ref is 'Reference to the audio file, if the message was a voice note.';
+comment on column messages.metadata is 'Channel details and measured usage. Email: gmail_thread_id, rfc822_message_id, subject. Voice: duration_s, mime_type. Usage: llm_input_tokens, llm_output_tokens, tts_characters, stt_seconds. Measured values only.';
 comment on column messages.transcript_source is 'user_text = typed; stt = speech-to-text of a user voice note; agent_text = agent text; tts_script = script sent to text-to-speech.';
 
 -- ---------------------------------------------------------------------------
