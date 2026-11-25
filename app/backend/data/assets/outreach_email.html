@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="$lang">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>$subject</title>
+<style>
+  @media only screen and (max-width: 620px) {
+    .sheet { width: 100% !important; }
+    .pad { padding-left: 24px !important; padding-right: 24px !important; }
+    .bubble { width: 100% !important; }
+  }
+  a:focus { outline: 2px solid #000000; outline-offset: 2px; }
+</style>
+</head>
+<body style="margin:0; padding:0; background-color:#eef3f6; -webkit-text-size-adjust:100%;">
+  <!-- preheader: shown in the inbox list, hidden in the body -->
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#eef3f6;">$preheader</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef3f6;">
+    <tr>
+      <td align="center" style="padding:32px 12px 40px;">
+
+        <table role="presentation" class="sheet" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px;">
+
+          <!-- who is writing -->
+          <tr>
+            <td class="pad" style="padding:0 40px 14px; font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:20px; color:#5b6670;">
+              <strong style="color:#000000; font-weight:700;">$persona_name</strong>, AI assistant for $company_name
+            </td>
+          </tr>
+
+          <!-- the letter -->
+          <tr>
+            <td class="pad" style="background-color:#ffffff; border:1px solid #dde4e9; border-radius:6px; padding:40px 40px 36px;">
+
+              <div style="font-family:Georgia, 'Times New Roman', serif; font-size:17px; line-height:28px; color:#000000;">
+                $body_html
+              </div>
+
+              <p style="margin:6px 0 32px; font-family:Georgia, 'Times New Roman', serif; font-size:17px; line-height:28px; color:#000000;">
+                $persona_name<br>
+                <span style="font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:13px; line-height:20px; color:#5b6670;">AI assistant for $company_name</span>
+              </p>
+
+              <!-- the handoff: a chat bubble from the persona, with the Telegram button -->
+              <table role="presentation" class="bubble" width="440" cellpadding="0" cellspacing="0" border="0" style="width:440px; max-width:100%;">
+                <tr>
+                  <td style="background-color:#000000; border-radius:18px 18px 18px 4px; padding:20px 22px 22px; font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;">
+                    <div style="font-size:13px; line-height:18px; font-weight:700; color:#9ad7ff; padding-bottom:6px;">$persona_name</div>
+                    <div style="font-size:15px; line-height:23px; color:#ffffff; padding-bottom:18px;">$bubble_text</div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td bgcolor="#9ad7ff" style="background-color:#9ad7ff; border-radius:999px;">
+                          <a href="$cta_url" target="_blank" style="display:inline-block; padding:12px 24px; font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:15px; line-height:20px; font-weight:700; color:#000000; text-decoration:none; border-radius:999px;">Continue on Telegram</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:16px 0 0; font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:12px; line-height:18px; color:#5b6670;">
+                Button not working? Open this link: <a href="$cta_url" target="_blank" style="color:#000000; word-break:break-all;">$cta_url</a>
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- footer -->
+          <tr>
+            <td class="pad" style="padding:20px 40px 0; font-family:-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; font-size:12px; line-height:18px; color:#5b6670;">
+              $disclaimer_html
+              <p style="margin:0 0 8px;">This email was written and sent by an AI assistant. The Telegram chat is with the same AI.</p>
+              <p style="margin:0;">$unsubscribe_text</p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

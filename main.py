@@ -18,6 +18,7 @@ from app.backend.core.company import load_company
 from app.backend.core.errors import ConfigError
 from app.backend.core.logging import setup_logging
 from app.backend.core.settings import ROOT, get_settings
+from app.backend.core.start import ensure_rag
 
 log = logging.getLogger("main")
 
@@ -60,6 +61,7 @@ def main() -> int:
     setup_logging(settings)
     try:
         company = load_company(settings)  # fail fast, before anything starts
+        ensure_rag(settings, company)  # build the knowledge-base index if it is missing
     except ConfigError as exc:
         print(f"Cannot start: {exc}", file=sys.stderr)
         return 1

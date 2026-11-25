@@ -24,7 +24,7 @@ def test_text_only_users_never_get_a_voice_note():
         for c in tables["tool_calls"]
         if c.tool == "send_voice_note" and c.user_id in text_only and c.refused_reason is None
     ]
-    voice = [m for m in tables["messages"] if m.user_id in text_only and m.audio_ref]
+    voice = [m for m in tables["messages"] if m.user_id in text_only and m.message_type == "voice"]
     assert not sent
     assert all(m.direction == "in" for m in voice)  # users may send voice; the agent may not
 
@@ -98,5 +98,12 @@ def test_message_metadata_holds_threading_and_usage_when_present():
     messages = mock.build()["messages"]
     emails = [m for m in messages if m.channel == "email"]
     assert emails and all(m.metadata["gmail_thread_id"].startswith("mock-") for m in emails)
-    tts = [m for m in messages if m.transcript_source == "tts_script"]
+    tts = [m for m in messages if m.direction == "out" and m.message_type == "voice"]
     assert tts and all(m.metadata["usage"]["tts_characters"] == len(m.text) for m in tts)
+
+
+def test_every_message_except_stickers_has_text():
+    messages = mock.build()["messages"]
+    assert {m.message_type for m in messages} >= {"text", "voice", "sticker"}
+    assert all(m.text for m in messages if m.message_type != "sticker")
+    assert not any(hasattr(m, "audio_ref") for m in messages)  # audio is never stored

@@ -1,6 +1,6 @@
 # Channels
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-25_
 
 A channel is how the agent talks to the outside world. Channels are **adapters**: each sits behind an interface in `app/backend/services/`, and the harness never imports a concrete adapter.
 
@@ -18,11 +18,11 @@ A channel is how the agent talks to the outside world. Channels are **adapters**
 
 ## Chat (Telegram)
 
-- **Entry:** `/start <token>` links the email to the Telegram user. The bot checks the token and the consent record, discloses that it is an AI, and asks the user to pick a mode.
-- **Modes:** *Audio + transcript*, *Audio only*, *Text only*, changeable with `/settings`. The mode is a hard limit enforced in code.
+- **Entry:** `/start <token>` links the email to the Telegram user. The bot checks the token and the consent record; the agent's first message is text, says it is an AI and shows the disclaimer. No mode is asked.
+- **Medium:** the agent chooses text or a voice note for every reply; the user decides only by asking for one in the chat. `/settings` sets an optional hard limit: *Text only* (voice notes refused in code), *Audio + transcript*, *Audio only*.
 - **Allowlist:** the bot replies only to users who redeemed a valid token and have consent on record. Everyone else is ignored.
 - **Incoming:** text goes through masking. Voice notes are transcribed first, and the transcript goes through the same masking.
-- **Outgoing:** the agent chooses text, at most one sticker (`<e:name>` tag), or a voice note through the `send_voice_note` tool. Voice notes are converted to OGG/Opus.
+- **Outgoing:** the agent chooses text, at most one sticker (`<e:name>` tag), or a voice note through the `send_voice_note` tool (never as the first message). Voice notes are converted to OGG/Opus.
 - **Transcripts:** every message is saved with its source (`user_text`, `stt`, `agent_text`, `tts_script`).
 
 ## Adding a channel

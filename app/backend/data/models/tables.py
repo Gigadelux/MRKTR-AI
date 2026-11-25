@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 PrefMode = Literal["audio_transcript", "audio_only", "text_only"]
 CrmStatus = Literal["new", "contacted", "engaged", "qualified", "booked", "not_now", "unsubscribed"]
 Channel = Literal["email", "telegram"]
-TranscriptSource = Literal["user_text", "stt", "agent_text", "tts_script"]
+MessageType = Literal["text", "voice", "sticker", "video"]
 DraftClass = Literal["interested", "question", "not_now", "unsubscribe"]
 DraftStatus = Literal["pending", "approved", "rejected", "sent"]
 SpanType = Literal["eval", "task", "llm", "function", "tool", "score", "classifier"]
@@ -47,9 +47,8 @@ class Message(BaseModel):
     channel: Channel
     channel_message_id: str | None = None
     direction: Literal["in", "out"]
-    text: str | None = None
-    audio_ref: str | None = None
-    transcript_source: TranscriptSource
+    message_type: MessageType = "text"
+    text: str | None = None  # voice notes keep only this transcript; audio is never stored
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 

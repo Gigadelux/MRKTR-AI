@@ -50,6 +50,18 @@ def test_messages_have_metadata_for_new_and_existing_databases():
     assert "comment on column messages.metadata" in SQL
 
 
+def test_messages_store_type_and_transcript_but_never_audio():
+    block = SQL[SQL.index("create table if not exists messages ") :].split(");", 1)[0]
+    assert "audio_ref" not in block and "transcript_source" not in block  # fresh installs
+    assert "check (message_type in ('text', 'voice', 'sticker', 'video'))" in block
+    assert "check (message_type = 'sticker' or text is not null)" in block
+    # databases made earlier: backfill, then drop the old columns
+    assert "alter table messages add column if not exists message_type" in SQL
+    assert "alter table messages drop column transcript_source" in SQL
+    assert "alter table messages drop column if exists audio_ref" in SQL
+    assert "comment on column messages.message_type" in SQL
+
+
 def test_message_and_telegram_ids_are_unique_per_user_not_per_channel():
     assert "messages_channel_msg_uq" not in SQL.replace(
         "drop index if exists messages_channel_msg_uq", ""

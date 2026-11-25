@@ -19,16 +19,20 @@ pick = st.selectbox(
 )
 _, messages = client.data(f"/conversations/{pick['user']['user_id']}")
 
+# (direction, message_type) -> what the stored text is
 LABEL = {
-    "user_text": "typed",
-    "stt": "voice note, transcribed",
-    "agent_text": "text",
-    "tts_script": "voice note, script sent to text-to-speech",
+    ("in", "text"): "typed",
+    ("out", "text"): "text",
+    ("in", "voice"): "voice note, transcribed",
+    ("out", "voice"): "voice note, script sent to text-to-speech",
+    ("in", "sticker"): "sticker",
+    ("out", "sticker"): "sticker",
+    ("out", "video"): "tutorial video",
 }
 for m in messages:
     who = "user" if m["direction"] == "in" else "assistant"
+    kind = m.get("message_type", "text")
+    label = LABEL.get((m["direction"], kind), kind)
     with st.chat_message(who):
-        st.write(m["text"] or "")
-        st.caption(
-            f"{m['channel']} · {LABEL[m['transcript_source']]} · {m['created_at'][:16].replace('T', ' ')}"
-        )
+        st.write(m["text"] or ("[sticker]" if kind == "sticker" else ""))
+        st.caption(f"{m['channel']} · {label} · {m['created_at'][:16].replace('T', ' ')}")

@@ -4,7 +4,7 @@
 
 # mrktr AI
 
-_Last updated: 2026-11-21_
+_Last updated: 2026-11-25_
 
 A general, modular go-to-market (GTM) agent. Give it a company profile and the company's documents, and it runs a measured outreach funnel: **Gmail starts the conversation, Telegram carries it.**
 
@@ -39,10 +39,14 @@ Without uv: `pip install -r requirements.txt` on Python 3.14, then `python main.
 
 Open http://localhost:8501. With no database connected the dashboard is empty: open the **Data** page and choose *Load mock data* to preview it. Mock data is fictional, labelled MOCK everywhere, and *Delete mock data* removes it again.
 
-The active company comes from `ACTIVE_COMPANY` (a folder under `gitignore/data/`). To collect that company's public documents into its `kb/` folder:
+The active company comes from `ACTIVE_COMPANY` (a folder under `gitignore/data/`). Put its public documents (`.md`/`.txt`) in `gitignore/data/<company>/kb/`, or point `RAG_DATA_DIR` at another folder inside `gitignore/data/`. On startup, `main.py` checks the local RAG index (Milvus Lite, `gitignore/temp/rag/`) and builds it if it is missing; the first run downloads the embedding models and embeds every chunk on the CPU (measured: about 14 minutes for 699 files / 13,605 chunks on the dev machine). Later starts only check it (under a second). Delete `gitignore/temp/rag/` to force a rebuild after changing the documents. With no documents, startup stops with an error.
+
+First-touch emails (dry run by default; `--send` asks for confirmation and only reaches addresses in `gitignore/data/<company>/allowlist.yaml`):
 
 ```bash
-uv run python -m app.backend.services.kb_scraper --company <Company>
+uv run python -m app.backend.services.gmail authorize     # once: Gmail OAuth in the browser
+uv run python -m app.backend.harness.agents.engager       # previews in gitignore/temp/outbox/
+uv run python -m app.backend.harness.agents.engager --send
 ```
 
 Use a dev database, a dev bot and test accounts while developing. Nothing is sent to anyone without the owner's explicit approval.
@@ -76,6 +80,14 @@ New dependencies must be license-compatible with Apache 2.0. Notable ones are li
 | httpx | Dashboard-to-API client | BSD-3-Clause |
 | pydantic-settings | Settings | MIT |
 | PyYAML | Company profile | MIT |
+| openai | OpenAI-compatible LLM client (OpenRouter, Venice AI) | Apache-2.0 |
+| google-api-python-client, google-auth-oauthlib | Gmail | Apache-2.0 |
+| aiogram | Telegram Bot API | MIT |
+| elevenlabs | Text-to-speech | MIT |
+| supabase | Database client | MIT |
+| pymilvus, milvus-lite | Local vector store for the RAG | Apache-2.0 |
+| fastembed | Local dense + BM25 embeddings | Apache-2.0 |
+| langchain-text-splitters | Document chunking | MIT |
 | pytest, ruff (dev) | Tests, lint and format | MIT |
 | three.js r149 (vendored in `app/streamlit/components/`) | 3D orb | MIT |
 

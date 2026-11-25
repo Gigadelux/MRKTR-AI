@@ -1,6 +1,6 @@
 # Database schema
 
-_Last updated: 2026-11-24_
+_Last updated: 2026-11-25_
 
 The database is Supabase (Postgres + pgvector). [`SCHEMA.sql`](SCHEMA.sql) creates everything and is safe to run more than once.
 
@@ -9,7 +9,7 @@ The database is Supabase (Postgres + pgvector). [`SCHEMA.sql`](SCHEMA.sql) creat
 1. Create a **dev** Supabase project. Never point development at a production database.
 2. Open **SQL Editor**, paste the contents of `SCHEMA.sql` and run it. The `vector` extension is enabled by the script.
 3. Put the project values in `.env` (see `example.env`): `SUPABASE_URL`, `SUPABASE_KEY` (service-role key, backend only) and `DATABASE_URL`.
-4. Check the embedding size. `kb_chunks.embedding` is `vector(1536)`. Change it in `SCHEMA.sql` before the first run if your embedding model uses another size.
+4. `kb_chunks` is currently unused: the RAG index is a local Milvus Lite file (`gitignore/temp/rag/`). The table stays for a possible pgvector index later.
 
 ## Access model
 
@@ -39,14 +39,14 @@ erDiagram
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `users` | One row per person in the funnel | `start_token` is unique; a Telegram id can be linked to only one user; `consent_at` null means the bot must not reply; `pref_mode` is `audio_transcript`, `audio_only` or `text_only` |
+| `users` | One row per person in the funnel | `start_token` is unique; a Telegram id can be linked to only one user; `consent_at` null means the bot must not reply; `pref_mode` is an optional `/settings` limit: `audio_transcript`, `audio_only`, `text_only`, or null (no limit: the agent chooses the medium) |
 | `crm` | Qualification fields written by `update_crm` | One row per user; `company_description` is a short description of what the lead's company does; `status` is `new`, `contacted`, `engaged`, `qualified`, `booked`, `not_now` or `unsubscribed` |
-| `messages` | Every message in both directions | `transcript_source` is `user_text`, `stt`, `agent_text` or `tts_script`; `metadata` (jsonb) holds Gmail `gmail_thread_id`, `rfc822_message_id` and `subject`, voice `duration_s` and `mime_type`, and measured usage (`llm_input_tokens`, `llm_output_tokens`, `tts_characters`, `stt_seconds`); unique per `(user_id, channel, channel_message_id)` because Telegram message ids are unique only inside one chat |
+| `messages` | Every message in both directions | `message_type` is `text`, `voice`, `sticker` or `video`; with `direction` it tells what `text` holds (typed text, agent text, speech-to-text transcript, TTS script, sticker name or emoji, tutorial topic); audio is never stored, voice notes keep only their transcript; `text` is required except for stickers (an incoming sticker may have no emoji); `metadata` (jsonb) holds Gmail `gmail_thread_id`, `rfc822_message_id` and `subject`, voice `duration_s`, sticker `sticker_set`, tutorial `video_ref`, and measured usage (`llm_input_tokens`, `llm_output_tokens`, `tts_characters`, `stt_seconds`); unique per `(user_id, channel, channel_message_id)` because Telegram message ids are unique only inside one chat |
 | `masked_messages` | Originals of sentences removed before the LLM saw them | Service role only |
 | `tool_calls` | Every tool call, refusals included | `refused_reason` is set when code refused the call |
 | `events` | Funnel milestones (`email_sent`, `token_redeemed`, `mode_chosen`, `qualified`, `booked`, ...) | The source for growth metrics |
 | `email_drafts` | Approval queue for replies to incoming email | **Not in the original data model**: added for the dashboard's approval page and the "% approved unchanged" metric. `final_text` equal to `draft_text` means approved unchanged |
-| `kb_chunks` | Knowledge-base chunks with embeddings | `collected_at` keeps the source date |
+| `kb_chunks` | Knowledge-base chunks with embeddings | **Unused for now**: retrieval runs on the local Milvus Lite index. `collected_at` keeps the source date |
 
 ### Evals (shaped like Braintrust)
 

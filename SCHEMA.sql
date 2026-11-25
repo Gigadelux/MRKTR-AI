@@ -1,5 +1,5 @@
 -- mrktr AI: Supabase (Postgres + pgvector) schema
--- Last updated: 2026-11-20
+-- Last updated: 2026-11-25
 --
 -- Run once in the Supabase SQL editor (use the DEV project first).
 -- Safe to re-run: every statement is idempotent. Documentation: SCHEMA.md.
@@ -29,7 +29,7 @@ comment on column users.channel_ids is 'External ids per channel, e.g. {"telegra
 create unique index if not exists users_telegram_id_uq
     on users ((channel_ids ->> 'telegram')) where channel_ids ->> 'telegram' is not null;
 comment on column users.start_token is 'Token in the Telegram deep link; redeeming it links the email to the Telegram user.';
-comment on column users.pref_mode is 'Hard limit on what the agent may send. text_only means voice notes are refused.';
+comment on column users.pref_mode is 'Optional limit set with /settings. Null = no limit: the agent chooses text or voice per reply. text_only means voice notes are refused.';
 comment on column users.consent_at is 'When the user gave consent. Null means the bot must not reply.';
 comment on column users.company is 'Name of the company profile (folder under gitignore/data/).';
 
@@ -58,7 +58,7 @@ comment on column crm.company_description is 'Short description of what the lead
 comment on column crm.status is 'Funnel stage of the lead.';
 
 -- ---------------------------------------------------------------------------
--- messages: every message, with a transcript for audio
+-- messages: every message; voice notes keep only their transcript (audio is never stored)
 -- ---------------------------------------------------------------------------
 create table if not exists messages (
     id                  uuid primary key default gen_random_uuid(),
@@ -66,25 +66,46 @@ create table if not exists messages (
     channel             text not null check (channel in ('email', 'telegram')),
     channel_message_id  text,
     direction           text not null check (direction in ('in', 'out')),
-    text                text,
-    audio_ref           text,                           -- Telegram file_id or a path under gitignore/temp/
-    transcript_source   text not null
-                        check (transcript_source in ('user_text', 'stt', 'agent_text', 'tts_script')),
+    message_type        text not null default 'text'
+                        constraint messages_message_type_check
+                        check (message_type in ('text', 'voice', 'sticker', 'video')),
+    text                text,                           -- typed text, transcript, sticker name/emoji or tutorial topic
     metadata            jsonb not null default '{}'::jsonb,
-    created_at          timestamptz not null default now()
+    created_at          timestamptz not null default now(),
+    constraint messages_text_required_check check (message_type = 'sticker' or text is not null)
 );
--- databases created before this column existed
+-- databases created before these columns existed
 alter table messages add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table messages add column if not exists message_type text not null default 'text';
+-- databases created with transcript_source/audio_ref: backfill message_type, then drop them
+do $$
+begin
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'messages'
+                 and column_name = 'transcript_source') then
+        update messages set message_type = 'voice'
+            where transcript_source in ('stt', 'tts_script');
+        alter table messages drop column transcript_source;
+    end if;
+end
+$$;
+alter table messages drop column if exists audio_ref;
+alter table messages drop constraint if exists messages_message_type_check;
+alter table messages add constraint messages_message_type_check
+    check (message_type in ('text', 'voice', 'sticker', 'video'));
+alter table messages drop constraint if exists messages_text_required_check;
+alter table messages add constraint messages_text_required_check
+    check (message_type = 'sticker' or text is not null);
 -- Telegram message ids are unique only inside one chat, so uniqueness is per user, not per channel.
 drop index if exists messages_channel_msg_uq;
 create unique index if not exists messages_user_channel_msg_uq
     on messages (user_id, channel, channel_message_id) where channel_message_id is not null;
 create index if not exists messages_user_created_idx on messages (user_id, created_at);
-comment on table messages is 'Every incoming and outgoing message. Audio always has a transcript in text.';
+comment on table messages is 'Every incoming and outgoing message. Audio is never stored: voice notes keep only their transcript in text.';
 comment on column messages.direction is 'in = from the user, out = from the agent.';
-comment on column messages.audio_ref is 'Reference to the audio file, if the message was a voice note.';
-comment on column messages.metadata is 'Channel details and measured usage. Email: gmail_thread_id, rfc822_message_id, subject. Voice: duration_s, mime_type. Usage: llm_input_tokens, llm_output_tokens, tts_characters, stt_seconds. Measured values only.';
-comment on column messages.transcript_source is 'user_text = typed; stt = speech-to-text of a user voice note; agent_text = agent text; tts_script = script sent to text-to-speech.';
+comment on column messages.message_type is 'text, voice, sticker or video. With direction it tells who wrote text: in+text = typed; out+text = agent text; in+voice = speech-to-text; out+voice = script sent to text-to-speech; out+sticker = expression name from stickers.yaml; in+sticker = the sticker emoji (may be null); out+video = tutorial topic.';
+comment on column messages.text is 'Required unless message_type = sticker.';
+comment on column messages.metadata is 'Channel details and measured usage. Email: gmail_thread_id, rfc822_message_id, subject. Voice: duration_s. Sticker: sticker_set. Video: video_ref. Usage: llm_input_tokens, llm_output_tokens, tts_characters, stt_seconds. Measured values only.';
 
 -- ---------------------------------------------------------------------------
 -- masked_messages: originals of sentences removed before the LLM saw them

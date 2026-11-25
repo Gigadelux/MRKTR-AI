@@ -144,15 +144,14 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
         user: t.User,
         channel: str,
         direction: str,
-        text: str,
-        source: str,
+        text: str | None,
+        kind: str,
         when: datetime,
-        audio: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> t.Message:
         m = t.Message(
             id=_id(rng), user_id=user.user_id, channel=channel, direction=direction, text=text,
-            transcript_source=source, audio_ref=audio, created_at=when,
+            message_type=kind, created_at=when,
             channel_message_id=f"mock-{len(messages) + 1}", metadata=metadata or {},
         )  # fmt: skip
         messages.append(m)
@@ -168,7 +167,7 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
         )  # fmt: skip
         users.append(user)
         message(user, "email", "out", f"Hi {first}, a short note about voice for your team. [MOCK email]",
-                "agent_text", sent_at,
+                "text", sent_at,
                 metadata={"gmail_thread_id": f"mock-thread-{i:03d}",
                           "rfc822_message_id": f"<mock-{i:03d}@example.com>",
                           "subject": "A short note about voice [MOCK]"})  # fmt: skip
@@ -194,15 +193,14 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
                     voice = user.pref_mode != "text_only" and rng.random() < 0.3
                     if attacks and turn == 0 and rng.random() < 0.35:
                         text, detector, score, reason = attacks.pop(0)
-                        m = message(user, "telegram", "in", f"{line} {MASK}", "user_text", when)
+                        m = message(user, "telegram", "in", f"{line} {MASK}", "text", when)
                         masked.append(t.MaskedMessage(
                             id=_id(rng), message_id=m.id, original_text=f"{line} {text}",
                             masked_text=f"{line} {MASK}", detector=detector, score=score,
                             reason=reason, created_at=when,
                         ))  # fmt: skip
                     else:
-                        message(user, "telegram", "in", line, "stt" if voice else "user_text", when,
-                                "mock://voice/in.ogg" if voice else None,
+                        message(user, "telegram", "in", line, "voice" if voice else "text", when,
                                 {"usage": {"stt_seconds": round(len(line) / 15, 1)}} if voice else None)  # fmt: skip
                     when += timedelta(seconds=rng.randint(5, 40))
                     reply = rng.choice(AGENT_LINES)
@@ -212,15 +210,16 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
                             "telegram",
                             "out",
                             reply,
-                            "tts_script",
+                            "voice",
                             when,
-                            "mock://voice/out.ogg",
                             {"usage": {"tts_characters": len(reply)}},
                         )
                         calls.append(t.ToolCall(id=_id(rng), user_id=user.user_id, tool="send_voice_note",
                                                 args={"text": reply}, result={"sent": True}, created_at=when))  # fmt: skip
                     else:
-                        message(user, "telegram", "out", reply, "agent_text", when)
+                        message(user, "telegram", "out", reply, "text", when)
+                        if turn == 0:  # the agent's <e:wave> tag, sent as a sticker after the text
+                            message(user, "telegram", "out", "wave", "sticker", when)
                         if user.pref_mode == "text_only" and rng.random() < 0.25:
                             calls.append(t.ToolCall(id=_id(rng), user_id=user.user_id, tool="send_voice_note",
                                                     args={"text": reply}, refused_reason="mode_text_only", created_at=when))  # fmt: skip
@@ -266,7 +265,7 @@ def build(seed: int = SEED) -> dict[str, list[Any]]:
         user = users[k]
         when = ANCHOR + timedelta(days=2, hours=k)
         m = message(
-            user, "email", "in", incoming, "user_text", when,
+            user, "email", "in", incoming, "text", when,
             metadata={"gmail_thread_id": f"mock-thread-{k:03d}",
                       "rfc822_message_id": f"<mock-reply-{k:03d}@example.com>",
                       "subject": "Re: A short note about voice [MOCK]"},

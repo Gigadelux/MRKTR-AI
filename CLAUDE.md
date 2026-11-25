@@ -1,6 +1,6 @@
 # CLAUDE.md — mrktr AI
 
-_Last updated: 2026-11-24_
+_Last updated: 2026-11-25_
 
 ## What this project is
 **mrktr AI** is a general, modular go-to-market (GTM) agent. Given a company profile and its documents, it runs a measured outreach funnel:
@@ -25,13 +25,14 @@ mrktr AI/
 ├── assets/                      # brand assets (logo)
 ├── app/
 │   ├── backend/
-│   │   ├── core/                # settings, logging, provider registry, allowlists, errors
+│   │   ├── core/                # settings, logging, provider registry, allowlists, errors, start (RAG check)
 │   │   ├── data/
+│   │   │   ├── assets/          # generic email templates (outreach_email.html)
 │   │   │   ├── models/          # pydantic + table models (users, crm, messages, masked_messages, events…)
 │   │   │   └── repositories/    # Supabase/Postgres access; SQL functions and analytics queries
 │   │   ├── endpoints/v1/        # FastAPI routers (health, admin actions for the dashboard, tutorials, logs)
-│   │   ├── harness/             # agent loop, tool definitions, prompt assembly, tag parser, masking, evals
-│   │   └── services/            # adapters: LLM, guards, TTS/STT, Gmail, Telegram, Remotion, RAG/KB
+│   │   ├── harness/             # agents (engager, seller), tools, prompts, tag parser, RAG, masking, evals
+│   │   └── services/            # adapters: LLM, guards, TTS/STT, Gmail, Telegram, Remotion
 │   ├── streamlit/               # local dashboard (funnel, CRM, conversations, masked messages, approvals, evals, API logs)
 │   └── tests/                   # unit tests: tools, tag parser, masking, allowlists
 ├── docs/                        # public docs: architecture, setup, examples (incl. a fictional sample company)
@@ -65,12 +66,14 @@ mrktr AI/
 | Unit tests | `app/tests/` |
 | Database schema | `SCHEMA.sql` (+ `SCHEMA.md`) |
 | Mock data for the dashboard | `app/backend/data/mock.py` writes to `gitignore/temp/mock/` |
+| Generic email templates | `app/backend/data/assets/` |
+| Startup checks (RAG index) | `app/backend/core/start.py` |
 | Company-specific anything | `gitignore/data/<company>/` |
 | Runtime artifacts (logs, audio, video) | `gitignore/temp/` |
 
 ## Running
 `main.py` is the only entry point. It:
-1. Loads settings and the active company profile (`ACTIVE_COMPANY` → `gitignore/data/<company>/`).
+1. Loads settings and the active company profile (`ACTIVE_COMPANY` → `gitignore/data/<company>/`), then runs `core/start.py:ensure_rag`: builds the local RAG index (Milvus Lite in `gitignore/temp/rag/`) from `RAG_DATA_DIR` (default `gitignore/data/<company>/kb/`) if it is missing, and stops with an error if there are no documents.
 2. Starts **FastAPI** (uvicorn) and the **Telegram bot** (long polling, inside the FastAPI lifespan).
 3. Starts **Streamlit** as a subprocess.
 4. Writes FastAPI/bot logs to `gitignore/temp/logs/api.log` (rotating). The Streamlit dashboard has a page that tails this file, so API logs are visible from the dashboard.
@@ -104,8 +107,8 @@ All external services sit behind an interface in `app/backend/services/`, chosen
 | Text-to-speech | `TTSProvider` | ElevenLabs | `TTS_PROVIDER`, `TTS_API_KEY`, `TTS_VOICE_ID` |
 | Speech-to-text | `STTProvider` | ElevenLabs | `STT_PROVIDER`, `STT_API_KEY` |
 | Tutorial videos | `TutorialRenderer` | Remotion render endpoint | `REMOTION_ENDPOINT`, `REMOTION_API_KEY` |
-| Embeddings | `Embedder` | any OpenAI-compatible endpoint | `EMBED_BASE_URL`, `EMBED_API_KEY`, `EMBED_MODEL` |
-| Email | `EmailChannel` | Gmail API | `GMAIL_CREDENTIALS_PATH` |
+| Embeddings + RAG | `harness/RAG/` | fastembed (local dense + BM25) in Milvus Lite (local file) | `RAG_DATA_DIR`, `RAG_DENSE_MODEL`, `RAG_SPARSE_MODEL` |
+| Email | `EmailChannel` | Gmail API | `GMAIL_CREDENTIALS_PATH`, `GMAIL_SENDER` |
 | Chat | `ChatChannel` | Telegram Bot API | `TELEGRAM_BOT_TOKEN` |
 | Evals | `EvalBackend` | Braintrust | `BRAINTRUST_API_KEY` |
 | Database | repositories | Supabase (Postgres + pgvector) | `SUPABASE_URL`, `SUPABASE_KEY`, `DATABASE_URL` |
@@ -118,31 +121,33 @@ All external services sit behind an interface in `app/backend/services/`, chosen
 ```
 users(user_id, channel_ids, email, start_token, pref_mode, consent_at, company)
 crm(user_id, company_name, company_description, role, industry, size, use_case, budget, timeline, status)
-messages(id, user_id, channel, channel_message_id, direction, text, audio_ref,
-         transcript_source [user_text|stt|agent_text|tts_script],
-         metadata jsonb, created_at)   # metadata: Gmail thread/headers, voice duration, measured usage
+messages(id, user_id, channel, channel_message_id, direction,
+         message_type [text|voice|sticker|video], text,
+         metadata jsonb, created_at)   # metadata: Gmail thread/headers, voice duration, sticker set, video ref, measured usage
 masked_messages(id, message_id, original_text, masked_text,
                 detector, score, reason, created_at)          # RLS: owner only
 tool_calls(id, user_id, tool, args, result, refused_reason, created_at)
 events(id, user_id, type, payload, created_at)               # email_sent, token_redeemed, mode_chosen, qualified, booked…
-kb_chunks(id, company, source, collected_at, content, embedding)
+kb_chunks(id, company, source, collected_at, content, embedding)   # unused for now: RAG is local Milvus Lite
 ```
-- Save a transcript for every message (typed, speech-to-text, agent text or TTS script).
+- Save a transcript for every message: typed text, speech-to-text, agent text or TTS script; `message_type` + `direction` tell which. **Audio is never stored**, only its transcript. Stickers store the expression name (out) or the sticker's emoji (in).
 - `SCHEMA.sql` is the source of truth for tables; it also holds `email_drafts` (approval queue) and the Braintrust-shaped `eval_*` tables. Keep `data/models/tables.py` in step with it.
 - Analytics are hand-written SQL in `data/repositories/`, one query per metric, each with a comment on what it measures.
 
 ## Agent behaviour
 - **Tools:** `lookup_lead`, `search_kb`, `update_crm`, `send_tutorial`, `send_voice_note`, `send_booking_link`.
-- **The agent decides** whether a reply is text, gets a sticker, or includes a voice note, within the limits of the user's mode.
-- **Modes** (chosen on `/start`, changeable with `/settings`): *Audio + transcript*, *Audio only*, *Text only*.
+- **The agent chooses the medium** of every reply (text or voice note, plus at most one sticker). The user decides only by asking for a medium in the chat; the agent then follows that request until asked otherwise (prompt-level, see `harness/prompts/system_prompt.py`).
+- **First message is always text** (AI disclosure + disclaimer), in the prompt and in code.
+- **Hard limit** (`pref_mode`, optional, set with `/settings`, not asked on `/start`): *Text only* (voice refused in code), *Audio + transcript*, *Audio only*. Null = no limit, the agent decides.
 - **Stickers:** at most one `<e:name>` tag per text reply. The parser buffers until the tag closes, validates the name against `stickers.yaml` (unknown → no sticker), strips the tag and sends the sticker. Tags never trigger audio.
 - **Voice notes:** only through the `send_voice_note(text)` tool, which checks in code, in this order:
   1. user is allowlisted (valid token + consent);
-  2. user's mode allows audio (`text_only` → refuse and tell the agent);
-  3. content guard passes on the text;
-  4. max length (~60 s of speech);
-  5. rate limit (≤ 1 per turn, a cap per conversation);
-  6. TTS → convert to the channel's format (Telegram: OGG/Opus, ffmpeg if needed) → send → log, refusals included.
+  2. user's `/settings` limit allows audio (`text_only` → refuse and tell the agent);
+  3. a text was already sent in this conversation (the first message is text → `first_message_text`);
+  4. content guard passes on the text;
+  5. max length (~60 s of speech);
+  6. rate limit (≤ 1 per turn, a cap per conversation);
+  7. TTS → convert to the channel's format (Telegram: OGG/Opus, ffmpeg if needed) → send → log, refusals included.
 - **Tutorials:** `send_tutorial(topic)` calls the Remotion endpoint with a script built from the KB, stores the video in `gitignore/temp/`, and sends it or its link.
 - **Masking:** split incoming text into sentences, score each with the injection and content guards, replace flagged sentences with `[removed: possible prompt injection]` before the LLM sees them, store originals in `masked_messages`, and keep answering the rest normally.
 
@@ -165,7 +170,7 @@ Eval suites live in `app/backend/harness/` and run against Braintrust; results c
 - Compare versions (v1 → v2) and runs before/after guards.
 
 ## Funnel metrics (dashboard)
-Email click-through (token redemptions / emails sent) · mode chosen · % who reply · turns per conversation · % qualified · bookings · cost per qualified lead · time from email to first reply · reply-sorting accuracy · % of drafts approved unchanged.
+Email click-through (token redemptions / emails sent) · voice vs text replies · % who reply · turns per conversation · % qualified · bookings · cost per qualified lead · time from email to first reply · reply-sorting accuracy · % of drafts approved unchanged.
 
 ## Working conventions
 - **Before any non-trivial change, propose 2 options with trade-offs and wait for a choice.**
@@ -190,5 +195,7 @@ uv sync                      # install
 uv run main.py               # FastAPI + Telegram bot + Streamlit
 uv run ruff check . && uv run ruff format .
 uv run pytest app/tests      # unit tests
-uv run python -m app.backend.services.kb_scraper --company <Company>   # (re)collect the public KB
+uv run python -m app.backend.services.gmail authorize     # once: Gmail OAuth (browser)
+uv run python -m app.backend.harness.agents.engager       # first-touch emails: dry run, previews in gitignore/temp/outbox/
+uv run python -m app.backend.harness.agents.engager --send   # sends after typed confirmation, allowlisted only
 ```

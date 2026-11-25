@@ -39,3 +39,12 @@ def load_company(settings: Settings) -> CompanyProfile:
             "or set ACTIVE_COMPANY to an existing folder."
         )
     return CompanyProfile.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def load_stickers(settings: Settings) -> dict[str, str]:
+    """Expression name -> Telegram sticker file_id, from stickers.yaml. Missing file = no stickers."""
+    path = settings.company_dir / "stickers.yaml"
+    if not path.is_file():
+        return {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {str(k): str(v) for k, v in (data.get("stickers") or {}).items() if v}
